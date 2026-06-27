@@ -285,11 +285,6 @@ export default function BlackjackPage() {
     <div className="space-y-6 animate-fade-in">
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <div className="flex items-center gap-2 mb-1">
-            <span className="chip chip-purple">Standard 21</span>
-            <span className="chip chip-muted">Dealer stands on 17</span>
-            <span className="chip chip-warning">~0.5% house edge</span>
-          </div>
           <h1 className="font-display text-3xl font-bold">Blackjack</h1>
           <p className="text-sm mt-1" style={{ color: "var(--muted)" }}>
             The deck is shuffled from SHA-256 before each hand. Cards are

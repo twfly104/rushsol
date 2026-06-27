@@ -271,14 +271,16 @@ export default function CrashPage() {
   // Final realized PNL once round settles (no position left).
   const finalPnl = position ? position.cashedOutSoFar - position.bet : 0;
 
-  // X-axis range. Use the larger of (a) the predicted crash time, (b) the
-  // current elapsed time + small headroom. This way labels grow dynamically
-  // when the round runs long.
+  // X-axis range. Once we know the predicted crash time (from crashPoint),
+  // that's the xMax — so the chart naturally fills out to the moment of
+  // crash and the line at crash time touches the top-right corner. Before
+  // the round starts we use a sensible default of 10s (about where a 2x
+  // crash would land, the median outcome for this growth curve).
   const predictedCrashT =
     crashPoint !== null
       ? Math.log(crashPoint) / (GROWTH_PER_SEC * Math.log(1.05))
       : 0;
-  const xMax = Math.max(predictedCrashT + 2, elapsed + 2, 10);
+  const xMax = crashPoint !== null ? Math.max(predictedCrashT, 1) : 10;
 
   // Choose x-step so we show ~6-10 labels.
   const xStep = xMax > 30 ? 5 : xMax > 15 ? 2 : 1;
@@ -289,24 +291,30 @@ export default function CrashPage() {
     xTicks.push(parseFloat(t.toFixed(2)));
   }
 
-  // Y-axis labels adapt to the running multiplier. We pick a tick scale
-  // whose top tick sits ~10% above the live multiplier so labels grow with
-  // state — short rounds get 1/2/5/10 ticks, long-running rounds expand
-  // to 10/20/50/100 etc.
-  const yTop = Math.max(multiplier * 1.15, crashPoint ? crashPoint * 1.05 : 10, 10);
-  const yScale: number[] =
-    yTop <= 12
-      ? [1, 2, 5, 10]
-      : yTop <= 30
-        ? [1, 2, 5, 10, 20, 30]
-        : yTop <= 110
-          ? [1, 2, 5, 10, 20, 50, 100]
-          : [1, 2, 5, 10, 20, 50, 100, 200, 500];
-  const yTicks = yScale.filter((v) => v <= yTop + 0.01);
-  // For the SVG draw we use yTop as the canvas max so labels and grid
-  // agree. (Old code used `crashPoint * 1.1` which made the curve hug the
-  // top of the chart; the live multiplier is the more useful reference.)
-  const yMax = Math.max(yTop, 10);
+  // Y-axis is keyed to the predicted crash point (or the live multiplier if
+  // the round is still running and the multiplier has already overtaken the
+  // static tick ceiling). The scale is *linear* — we go from 1.00x at the
+  // bottom to crashPoint (or current multiplier) at the top with simple
+  // quartile ticks. This makes the diagonal "y = x" line actually look like
+  // y = x: at any (t, m) the visible rise/run ratio on screen matches the
+  // math ratio, instead of being crushed by a logarithmic-feeling tick set.
+  const yTop =
+    crashPoint !== null
+      ? crashPoint
+      : Math.max(multiplier, 2);
+  // Quartile ticks: 1.00x at the bottom, then 25/50/75/100% of the range up
+  // to yTop. Always show 1.00x even when the multiplier has moved up — the
+  // chart is still grounded at the launch price.
+  const yTicks = Array.from(new Set([
+    1,
+    1 + (yTop - 1) * 0.25,
+    1 + (yTop - 1) * 0.5,
+    1 + (yTop - 1) * 0.75,
+    yTop,
+  ])).map((v) => +v.toFixed(2));
+  // yMax drives SVG coordinate space; keep a small headroom above yTop so
+  // the line doesn't sit flush against the chart ceiling.
+  const yMax = yTop;
 
   // Current chart mark position for the live "YOU" marker.
   const liveCashOutMarker = position?.partials[position.partials.length - 1] ?? null;
@@ -323,8 +331,28 @@ export default function CrashPage() {
         {history.length > 0 && <PastRounds values={history} />}
       </header>
 
-      <div className="grid lg:grid-cols-[1fr_320px] gap-4">
-        {/* CHART + CONTROLS */}
+      <div className="grid lg:grid-cols-[320px_1fr] gap-4">
+        {/* LEFT: bet + cash-out controls. Sticky so they're always
+            reachable while the chart sits beside them. */}
+        <div className="space-y-4 lg:sticky lg:top-4 lg:self-start">
+          <ControlPanel
+            bet={bet}
+            setBet={setBet}
+            balance={balance}
+            phase={phase}
+            cashoutPct={cashoutPct}
+            setCashoutPct={setCashoutPct}
+            multiplier={multiplier}
+            livePnl={livePnl}
+            onStart={startRound}
+            onCashOut={() => cashOut(cashoutPct)}
+            onNextRound={newRound}
+            error={error}
+          />
+        </div>
+
+        {/* RIGHT: chart + live state stacked. The chart fills the rest of
+            the row; the live-state card sits below it as a compact readout. */}
         <div className="space-y-4">
           <div className="panel overflow-hidden">
             <div
@@ -474,35 +502,19 @@ export default function CrashPage() {
             />
           </div>
 
-          {/* CONTROL PANEL — moves below the chart, full width */}
-          <ControlPanel
-            bet={bet}
-            setBet={setBet}
-            balance={balance}
+          {/* LIVE STATE PANEL — sits below the chart on the right column. */}
+          <LiveStatePanel
             phase={phase}
-            cashoutPct={cashoutPct}
-            setCashoutPct={setCashoutPct}
             multiplier={multiplier}
+            elapsed={elapsed}
+            crashPoint={crashPoint}
+            position={position}
             livePnl={livePnl}
-            onStart={startRound}
-            onCashOut={() => cashOut(cashoutPct)}
-            onNextRound={newRound}
-            error={error}
+            finalPnl={finalPnl}
+            predictedCrashT={predictedCrashT}
+            balance={balance}
           />
         </div>
-
-        {/* LIVE STATE PANEL — left rail (instant chart) */}
-        <LiveStatePanel
-          phase={phase}
-          multiplier={multiplier}
-          elapsed={elapsed}
-          crashPoint={crashPoint}
-          position={position}
-          livePnl={livePnl}
-          finalPnl={finalPnl}
-          predictedCrashT={predictedCrashT}
-          balance={balance}
-        />
       </div>
 
       {round && <CrashRoundLog round={round} />}
@@ -618,9 +630,7 @@ function ControlPanel({
           border: "1px solid var(--border)",
         }}
       >
-        <Row label="House edge" value="4.00%" />
         <Row label="Max multiplier" value="1000x" />
-        <Row label="P(RTP)" value="96.00%" />
       </div>
     </div>
   );

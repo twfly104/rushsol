@@ -99,8 +99,13 @@ path dormant.
    | `SESSION_JWT_SECRET` | (random 32+ chars) | Optional — only when session middleware is wired |
    | `DATABASE_URL`, `HELIUS_API_KEY`, `FIREBLOCKS_*`, `SUMSUB_*`, `BLOCKED_COUNTRIES`, `PLATFORM_TREASURY_PUBKEY` | — | **No.** Leave blank for devnet. Adding these will not move money (the mock path doesn't use them) but they signal you're pointing at prod. |
 
-4. Deploy. Vercel runs `npm run build` (which is `next build`, no
-   `prisma generate` — see `vercel.json` for why).
+4. Deploy. Vercel runs the build command from `vercel.json`, which is
+   `next build` (no `prisma generate`). The devnet deploy doesn't need
+   the Prisma client generated — `ENABLE_MOCK_BALANCE=true` keeps every
+   DB code path dormant, and the default `@prisma/client` runtime exports
+   the stubs `lib/db.ts` references. To switch to a real-money build,
+   prefix `buildCommand` with `prisma generate &&` and provision
+   `DATABASE_URL` (Neon / Supabase / Vercel Postgres) in the dashboard.
 
 ### What Vercel serves
 

@@ -289,9 +289,24 @@ export default function CrashPage() {
     xTicks.push(parseFloat(t.toFixed(2)));
   }
 
-  // Y-axis labels adapt to the max multiplier shown.
-  const yMax = Math.max(multiplier * 1.5, crashPoint ? crashPoint * 1.1 : 10, 10);
-  const yTicks = [1, 2, 5, 10, 20].filter((v) => v <= yMax + 0.01);
+  // Y-axis labels adapt to the running multiplier. We pick a tick scale
+  // whose top tick sits ~10% above the live multiplier so labels grow with
+  // state — short rounds get 1/2/5/10 ticks, long-running rounds expand
+  // to 10/20/50/100 etc.
+  const yTop = Math.max(multiplier * 1.15, crashPoint ? crashPoint * 1.05 : 10, 10);
+  const yScale: number[] =
+    yTop <= 12
+      ? [1, 2, 5, 10]
+      : yTop <= 30
+        ? [1, 2, 5, 10, 20, 30]
+        : yTop <= 110
+          ? [1, 2, 5, 10, 20, 50, 100]
+          : [1, 2, 5, 10, 20, 50, 100, 200, 500];
+  const yTicks = yScale.filter((v) => v <= yTop + 0.01);
+  // For the SVG draw we use yTop as the canvas max so labels and grid
+  // agree. (Old code used `crashPoint * 1.1` which made the curve hug the
+  // top of the chart; the live multiplier is the more useful reference.)
+  const yMax = Math.max(yTop, 10);
 
   // Current chart mark position for the live "YOU" marker.
   const liveCashOutMarker = position?.partials[position.partials.length - 1] ?? null;
@@ -301,7 +316,6 @@ export default function CrashPage() {
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <div className="flex items-center gap-2 mb-1">
-            <span className="chip chip-warning">4% edge</span>
             <span className="chip chip-muted">~10s median round</span>
           </div>
           <h1 className="font-display text-3xl font-bold">Crash</h1>
@@ -880,15 +894,24 @@ function GridAndAxis({
 function CurvePath({
   points, xMax, yMax, phase,
 }: { points: { t: number; m: number }[]; xMax: number; yMax: number; phase: string }) {
-  if (points.length < 2) return null;
+  // Diagonal y=x line from (0, 1) up to the current (elapsed, multiplier).
+  // The previous version traced every tick point, which produced an
+  // exponential-looking curve because the multiplier grows exponentially
+  // in time. The new line is straight, and the axes still adapt via
+  // xMax/yMax (computed in the parent from elapsed/multiplier).
+  const last = points[points.length - 1];
+  if (!last || last.m <= 1) return null;
   const top = 0, bottom = 28;
   const w = 1000, h = 600;
-  const pathD = points.map((p, i) => {
-    const x = (p.t / xMax) * w;
-    const y = top + (1 - Math.min(0.98, p.m / yMax)) * (h - bottom - top);
-    return `${i === 0 ? "M" : "L"} ${x.toFixed(1)} ${y.toFixed(1)}`;
-  }).join(" ");
-  const fillD = pathD + ` L ${w} ${h} L 0 ${h} Z`;
+  const x0 = 0, y0 = 1;
+  const x1 = (last.t / xMax) * w;
+  const y1 = top + (1 - Math.min(0.98, last.m / yMax)) * (h - bottom - top);
+  // Start the stroke at the baseline (1.00x) at x=0, end at the current
+  // multiplier. Slope of the line == multiplier growth.
+  const baselineY = top + (1 - Math.min(0.98, y0 / yMax)) * (h - bottom - top);
+  const pathD = `M ${x0} ${baselineY.toFixed(1)} L ${x1.toFixed(1)} ${y1.toFixed(1)}`;
+  // Filled triangle under the diagonal for the same green/red glow.
+  const fillD = `M ${x0} ${baselineY.toFixed(1)} L ${x1.toFixed(1)} ${y1.toFixed(1)} L ${x1.toFixed(1)} ${baselineY.toFixed(1)} Z`;
   const color = phase === "crashed" ? "var(--danger)" : "var(--accent)";
   return (
     <svg

@@ -129,10 +129,6 @@ export default function CoinflipPage() {
   return (
     <div className="space-y-6 animate-fade-in">
       <header>
-        <div className="flex items-center gap-2 mb-1">
-          <span className="chip chip-warning">4% house edge</span>
-          <span className="chip chip-muted">SHA-256 seeded</span>
-        </div>
         <h1 className="font-display text-3xl font-bold">Coinflip</h1>
         <p className="text-sm mt-1" style={{ color: "var(--muted)" }}>
           Pick a side, place a bet, watch the SHA-256 commit resolve. Every
@@ -141,8 +137,31 @@ export default function CoinflipPage() {
       </header>
 
       <div className="grid lg:grid-cols-5 gap-4">
-        {/* LEFT: bet panel */}
+        {/* LEFT: bet panel — Bet button at top so it's always reachable. */}
         <div className="lg:col-span-2 panel p-6 space-y-5">
+          {/* BET BUTTON — first thing visible, sticky so it stays put while
+              the amount/side controls scroll within the panel. */}
+          <button
+            onClick={flip}
+            disabled={flipping}
+            className="btn btn-primary w-full py-4 text-base sticky top-2 z-10"
+          >
+            {flipping ? "Flipping…" : `Bet ${bet} SOL on ${side}`}
+          </button>
+
+          {error && (
+            <div
+              className="text-sm px-3 py-2 rounded-lg"
+              style={{
+                background: "color-mix(in srgb, var(--danger) 12%, transparent)",
+                color: "var(--danger)",
+                border: "1px solid color-mix(in srgb, var(--danger) 30%, transparent)",
+              }}
+            >
+              {error}
+            </div>
+          )}
+
           <div>
             <label className="stat-label block mb-2">Bet amount</label>
             <div className="flex items-center gap-2">
@@ -250,13 +269,8 @@ export default function CoinflipPage() {
             </div>
           )}
 
-          <button
-            onClick={flip}
-            disabled={flipping}
-            className="btn btn-primary w-full py-4 text-base"
-          >
-            {flipping ? "Flipping…" : `Bet ${bet} SOL on ${side}`}
-          </button>
+          {/* Bet button moved to the top of the panel so it's always visible
+              without scrolling. See above. */}
 
           {/* STATS */}
           <div
@@ -520,7 +534,7 @@ function Coin({ flipping, result, side }: { flipping: boolean; result: CoinflipR
         >
           <div className="coin-inner">
             <span
-              className="font-display text-5xl font-bold opacity-30"
+              className="font-display text-5xl font-bold"
               style={{ color: "#fff" }}
             >
               {flipping ? (side === SIDE.HEADS ? "T" : "H") : wonSide}

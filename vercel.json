@@ -1,9 +1,3 @@
 {
-  "$schema": "https://openapi.vercel.sh/vercel.json",
-  "//buildCommand": "Devnet deploy: skip `prisma generate`. The Prisma schema in prisma/schema.prisma describes a production ledger that isn't wired in (ENABLE_MOCK_BALANCE=true keeps every DB code path dormant). The default @prisma/client runtime exports the stubs lib/db.ts and lib/balance.ts reference, and none of those are reached at build time. To re-enable in production, prefix with `prisma generate &&` and provision a real DATABASE_URL in the Vercel dashboard.",
-  "buildCommand": "next build",
-  "framework": "nextjs",
-  "//regions": "Vercel Hobby is single-region for Functions. Static pages still serve from the global CDN automatically; only /api/health and /api/me run in this region. Upgrade to Pro for multi-region Functions. Singapore chosen for lowest latency to APAC + India + Australia.",
-  "regions": ["sin1"],
-  "crons": []
+  "framework": "nextjs"
 }

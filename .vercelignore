@@ -1,0 +1,31 @@
+# Exclude from the Vercel deploy upload. Static assets the frontend needs
+# (public/, app/, components/, lib/, package.json, next.config.mjs, etc.)
+# are included by default. Everything below is dev-only and would just
+# slow the upload + bloat the deploy.
+
+# Tests run in CI, not on Vercel.
+tests/
+coverage/
+
+# Build artifacts and local caches. .next is rebuilt by Vercel.
+.next/
+out/
+*.tsbuildinfo
+
+# Local env. Even though .gitignore keeps this out of git, Vercel picks
+# up the working tree on first deploy if it's not excluded here. Never
+# ship dev secrets to a deployed environment — set them in the Vercel
+# dashboard instead.
+.env
+.env.local
+.env*.local
+
+# Logs and local dev artifacts.
+*.log
+.devserver.log
+.DS_Store
+
+# Plan and memory files belong to the agent context, not the deployed app.
+.claude/
+.idea/
+.vscode/

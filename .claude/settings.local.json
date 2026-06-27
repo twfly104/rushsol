@@ -1,0 +1,33 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install *)",
+      "Bash(npx tsc *)",
+      "Bash(npm ls *)",
+      "Bash(xargs grep -l '\"version\"')",
+      "Bash(xargs -I{} sh -c 'echo \"=== {} ===\" && grep version {}')",
+      "Bash(npx next *)",
+      "Bash(curl -s http://localhost:3000)",
+      "Bash(curl -s http://localhost:3001/blackjack)",
+      "Bash(curl -s http://localhost:3001/verify)",
+      "Bash(curl -s http://localhost:3001/)",
+      "Bash(curl -s http://localhost:3001/crash)",
+      "Bash(git config *)",
+      "Bash(git add *)",
+      "WebFetch(domain:github.com)",
+      "Bash(curl -s -o /dev/null -w \"HTTP %{http_code} in %{time_total}s\\\\n\" http://localhost:3001/)",
+      "Bash(curl -s -o /dev/null -w \"HTTP %{http_code} in %{time_total}s\\\\n\" http://localhost:3001/blackjack)",
+      "Bash(curl -s -o /dev/null -w \"HTTP %{http_code} in %{time_total}s\\\\n\" http://localhost:3001/coinflip)",
+      "Bash(curl -s -o /dev/null -w \"HTTP %{http_code} in %{time_total}s\\\\n\" http://localhost:3001/crash)",
+      "Bash(curl -s -o /dev/null -w \"HTTP %{http_code} in %{time_total}s\\\\n\" http://localhost:3001/verify)",
+      "Bash(ENABLE_MOCK_BALANCE=true node -e ' *)",
+      "Bash(npm test *)",
+      "Bash(curl -s -o /dev/null -w \"/  HTTP %{http_code}\\\\n\" http://localhost:3001/)",
+      "Bash(curl -s -o /dev/null -w \"/coinflip  HTTP %{http_code}\\\\n\" http://localhost:3001/coinflip)",
+      "Bash(curl -s -o /dev/null -w \"/crash  HTTP %{http_code}\\\\n\" http://localhost:3001/crash)",
+      "Bash(curl -s -o /dev/null -w \"/blackjack  HTTP %{http_code}\\\\n\" http://localhost:3001/blackjack)",
+      "Bash(curl -s -o /dev/null -w \"/verify  HTTP %{http_code}\\\\n\" http://localhost:3001/verify)",
+      "Bash(curl *)"
+    ]
+  }
+}

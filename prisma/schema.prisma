@@ -1,0 +1,222 @@
+// Prisma schema for RushSol production ledger.
+//
+// This is the single source of truth for user balance. The on-chain deposit
+// indexer writes to `deposits`, the game service writes to `bets`, and
+// withdrawals are recorded in `withdrawals`. Balance is derived from these
+// rows in a ledger-style view (see lib/balance.ts), never from in-memory
+// state and never directly from the on-chain balance.
+//
+// All money rows are immutable after write; corrections happen as new rows
+// (an "adjustment" bet, a "fee" deposit, etc.) — never UPDATEs in place.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Users ────────────────────────────────────────────────────────────────
+
+model User {
+  id             String   @id @default(cuid())
+  walletPubkey   String   @unique
+  // Per-user ephemeral Solana deposit address, generated server-side.
+  depositAddress String?  @unique
+  country        String?  // ISO 3166-1 alpha-2, set from geofence header
+  kycStatus      KycStatus @default(NOT_STARTED)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  lastLoginAt    DateTime?
+
+  deposits       Deposit[]
+  withdrawals    Withdrawal[]
+  bets           Bet[]
+  gameSessions   GameSession[]
+  kyc            KycRecord?
+  rg             ResponsibleGaming?
+  auditLog       AuditLog[]
+
+  @@index([walletPubkey])
+}
+
+enum KycStatus {
+  NOT_STARTED
+  PENDING
+  APPROVED
+  REJECTED
+  EXPIRED
+}
+
+// ─── Money ledger ─────────────────────────────────────────────────────────
+
+enum LedgerStatus {
+  PENDING
+  CONFIRMED
+  FAILED
+}
+
+model Deposit {
+  id              String       @id @default(cuid())
+  userId          String
+  txSignature     String       @unique
+  amount          Decimal      @db.Decimal(20, 9) // SOL, up to 9 decimals
+  fromAddress     String
+  status          LedgerStatus @default(PENDING)
+  confirmations   Int          @default(0)
+  slot            BigInt?
+  blockTime       DateTime?
+  createdAt       DateTime     @default(now())
+  confirmedAt     DateTime?
+
+  user            User         @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@index([userId, status])
+  @@index([status, createdAt])
+}
+
+model Withdrawal {
+  id              String       @id @default(cuid())
+  userId          String
+  txSignature     String?      @unique
+  amount          Decimal      @db.Decimal(20, 9)
+  fee             Decimal      @db.Decimal(20, 9) @default(0)
+  destinationAddr String
+  status          LedgerStatus @default(PENDING)
+  failureReason   String?
+  createdAt       DateTime     @default(now())
+  broadcastAt     DateTime?
+  confirmedAt     DateTime?
+
+  user            User         @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@index([userId, status])
+  @@index([status, createdAt])
+}
+
+// ─── Game rounds ──────────────────────────────────────────────────────────
+
+enum Game {
+  COINFLIP
+  CRASH
+  BLACKJACK
+}
+
+enum BetStatus {
+  PENDING
+  RESOLVED
+  VOIDED
+}
+
+model Bet {
+  id              String    @id @default(cuid())
+  userId          String
+  game            Game
+  betAmount       Decimal   @db.Decimal(20, 9)
+  payout          Decimal   @db.Decimal(20, 9) @default(0)
+  // Provably-fair seed chain values. serverSeedHash is the commitment shown
+  // pre-round; serverSeed is revealed post-round on the verify page.
+  serverSeedHash  String
+  serverSeed      String?   // null until round resolves + reveal window passes
+  clientSeed      String
+  clientSeedHash  String
+  nonce           BigInt
+  // Game-specific outcome payload, JSON. Schema varies per game.
+  outcome         Json
+  status          BetStatus @default(PENDING)
+  createdAt       DateTime  @default(now())
+  resolvedAt      DateTime?
+  revealedAt      DateTime? // when serverSeed was published for audit
+
+  user            User      @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@index([userId, createdAt])
+  @@index([game, createdAt])
+}
+
+model GameSession {
+  // Persisted state for multi-round games (blackjack hand, crash round).
+  id            String   @id @default(cuid())
+  userId        String
+  game          Game
+  state         Json
+  // For crash: the round's open/close window. For blackjack: null until done.
+  opensAt       DateTime?
+  closesAt      DateTime?
+  resolvedAt    DateTime?
+  createdAt     DateTime @default(now())
+
+  user          User     @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@index([userId, game, createdAt])
+}
+
+// ─── Compliance ───────────────────────────────────────────────────────────
+
+model KycRecord {
+  id          String   @id @default(cuid())
+  userId      String   @unique
+  provider    String   // "sumsub" | "onfido" | etc
+  externalId  String?  // applicant id at the provider
+  status      KycStatus
+  // Raw provider payload (do not read in app code; for support/audit only).
+  payload     Json?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model ResponsibleGaming {
+  id                String   @id @default(cuid())
+  userId            String   @unique
+  // Soft limits, SOL per 24h rolling window. null = unlimited.
+  depositLimit24h   Decimal? @db.Decimal(20, 9)
+  lossLimit24h      Decimal? @db.Decimal(20, 9)
+  // Self-exclusion timestamp. While > now(), user cannot log in or bet.
+  selfExcludedUntil DateTime?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// ─── Audit ────────────────────────────────────────────────────────────────
+
+enum AuditAction {
+  USER_LOGIN
+  USER_LOGOUT
+  DEPOSIT_CONFIRMED
+  DEPOSIT_FAILED
+  WITHDRAWAL_REQUESTED
+  WITHDRAWAL_BROADCAST
+  WITHDRAWAL_FAILED
+  BET_PLACED
+  BET_RESOLVED
+  BET_VOIDED
+  KYC_SUBMITTED
+  KYC_APPROVED
+  KYC_REJECTED
+  RG_LIMIT_SET
+  RG_SELF_EXCLUDE
+  GEO_BLOCKED
+  ADMIN_ADJUSTMENT
+}
+
+model AuditLog {
+  id        String      @id @default(cuid())
+  userId    String?
+  action    AuditAction
+  // Arbitrary structured payload; do not log raw card numbers, full SSN, etc.
+  payload   Json?
+  ip        String?
+  userAgent String?
+  createdAt DateTime    @default(now())
+
+  user      User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt])
+  @@index([action, createdAt])
+}

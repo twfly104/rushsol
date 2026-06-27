@@ -1,0 +1,68 @@
+name: CI
+
+# Cancel any in-progress run for the same PR when a new commit lands;
+# otherwise we waste CI minutes on stale commits.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+on:
+  pull_request:
+  push:
+    branches: [main, master]
+
+permissions:
+  contents: read
+
+jobs:
+  # ── Job 1: unit tests + ESLint ────────────────────────────────────────
+  test:
+    name: Test & lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type-check
+        # Type errors are easy to miss in a vitest pass; run tsc explicitly.
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Unit tests
+        run: npm test
+
+  # ── Job 2: production build ───────────────────────────────────────────
+  # Vercel runs its own build, but a PR-time build catches type errors and
+  # import-graph issues that vitest won't, before they reach Vercel.
+  build:
+    name: Production build
+    runs-on: ubuntu-latest
+    # Don't waste CI cycles on a build before tests pass.
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        env:
+          # Mirror the devnet dev environment. The build never reaches the
+          # DB so DATABASE_URL is intentionally absent; that's correct.
+          ENABLE_MOCK_BALANCE: "true"
+          NEXT_PUBLIC_SOLANA_NETWORK: "devnet"
+        run: npm run build
